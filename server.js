@@ -122,6 +122,18 @@ app.get('/', async (req, res) => {
 
                             </li>
 
+                            <li class="nav-item">
+
+                                <a
+                                class="nav-link"
+                                href="/minha-conta">
+
+                                    Minha Conta
+
+                                </a>
+
+                            </li>
+
                         </ul>
 
                         <form
@@ -222,13 +234,27 @@ app.get('/', async (req, res) => {
                             ${produto.estoque}
                         </p>
 
+                        ${produto.estoque > 0 ? `
+
                         <a
                         href="/carrinho/adicionar/${produto.id}"
                         class="btn btn-success">
 
-                            Adicionar ao Carrinho
+                        Adicionar ao Carrinho
 
                         </a>
+
+                        ` : `
+
+                        <button
+                        class="btn btn-danger"
+                        disabled>
+
+                        Sem Estoque
+
+                        </button>
+
+                        `}
 
                     </div>
 
@@ -243,6 +269,8 @@ app.get('/', async (req, res) => {
             </div>
 
         </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
         </body>
 
@@ -676,6 +704,588 @@ app.get('/produto/:id', async (req, res) => {
 
 });
 
+        app.get('/meus-pedidos', auth, async (req, res) => {
+
+    try {
+
+        const [pedidos] = await db.query(
+            `
+            SELECT *
+            FROM pedidos
+            WHERE usuario_id = ?
+            ORDER BY data_pedido DESC
+            `,
+            [req.session.usuario.id]
+        );
+
+        let html = `
+        <!DOCTYPE html>
+
+        <html>
+
+        <head>
+
+            <meta charset="UTF-8">
+
+            <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+            rel="stylesheet">
+
+            <title>
+                Meus Pedidos
+            </title>
+
+        </head>
+
+        <body>
+
+        <div class="container mt-4">
+
+            <h1>
+                Meus Pedidos
+            </h1>
+
+            <hr>
+
+            <table class="table table-striped">
+
+                <thead>
+
+                    <tr>
+
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Total</th>
+                        <th>Data</th>
+                        <th>Detalhes</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+        `;
+
+        pedidos.forEach(pedido => {
+
+            html += `
+            <tr>
+
+                <td>
+                    ${pedido.id}
+                </td>
+
+                <td>
+                    ${pedido.status}
+                </td>
+
+                <td>
+                    R$ ${pedido.valor_total}
+                </td>
+
+                <td>
+                    ${pedido.data_pedido}
+                </td>
+
+                <td>
+
+                    <a
+                    href="/pedido/${pedido.id}"
+                    class="btn btn-primary btn-sm">
+
+                        Ver
+
+                    </a>
+
+                </td>
+
+            </tr>
+            `;
+
+        });
+
+        html += `
+                </tbody>
+
+            </table>
+
+        </div>
+
+        </body>
+
+        </html>
+        `;
+
+        res.send(html);
+
+    } catch(err){
+
+        console.log(err);
+
+        res.send(
+            'Erro ao carregar pedidos'
+        );
+
+    }
+
+});
+
+app.get('/pedido/:id', auth, async (req, res) => {
+
+    const [pedidoInfo] = await db.query(
+        `
+        SELECT *
+        FROM pedidos
+        WHERE id = ?
+        `,
+        [req.params.id]
+    );
+
+    const pedido = pedidoInfo[0];
+
+    const [itens] = await db.query(
+        `
+        SELECT
+            ip.*,
+            p.nome
+
+        FROM itens_pedido ip
+
+        INNER JOIN produtos p
+        ON p.id = ip.produto_id
+
+        WHERE ip.pedido_id = ?
+        `,
+        [req.params.id]
+    );
+
+    let total = 0;
+
+    let html = `
+    <!DOCTYPE html>
+
+    <html>
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1">
+
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+        <title>
+            Pedido #${pedido.id}
+        </title>
+
+    </head>
+
+    <body>
+
+    <div class="container mt-4">
+
+        <div class="card shadow mb-4">
+
+            <div class="card-header bg-primary text-white">
+
+                <h3 class="mb-0">
+
+                    Pedido #${pedido.id}
+
+                </h3>
+
+            </div>
+
+            <div class="card-body">
+
+                <p>
+
+                    <strong>Status:</strong>
+
+                    <span class="badge bg-success">
+
+                        ${pedido.status}
+
+                    </span>
+
+                </p>
+
+                <p>
+
+                    <strong>Data:</strong>
+
+                    ${pedido.data_pedido}
+
+                </p>
+
+            </div>
+
+        </div>
+
+        <table class="table table-striped table-hover">
+
+            <thead class="table-dark">
+
+                <tr>
+
+                    <th>Produto</th>
+                    <th>Quantidade</th>
+                    <th>Preço Unitário</th>
+                    <th>Subtotal</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+    `;
+
+    itens.forEach(item => {
+
+        const subtotal =
+            Number(item.quantidade) *
+            Number(item.preco_unitario);
+
+        total += subtotal;
+
+        html += `
+        <tr>
+
+            <td>
+
+                ${item.nome}
+
+            </td>
+
+            <td>
+
+                ${item.quantidade}
+
+            </td>
+
+            <td>
+
+                R$ ${Number(item.preco_unitario).toFixed(2)}
+
+            </td>
+
+            <td>
+
+                R$ ${subtotal.toFixed(2)}
+
+            </td>
+
+        </tr>
+        `;
+
+    });
+
+    html += `
+            </tbody>
+
+        </table>
+
+        <div class="card shadow">
+
+            <div class="card-body text-end">
+
+                <h3>
+
+                    Total:
+                    R$ ${total.toFixed(2)}
+
+                </h3>
+
+            </div>
+
+        </div>
+
+        <br>
+
+        <a
+        href="/meus-pedidos"
+        class="btn btn-secondary">
+
+            Voltar
+
+        </a>
+
+    </div>
+
+    </body>
+
+    </html>
+    `;
+
+    res.send(html);
+
+});
+
+app.get('/minha-conta', auth, async (req, res) => {
+
+    const [usuarios] = await db.query(
+        `
+        SELECT *
+        FROM usuarios
+        WHERE id = ?
+        `,
+        [req.session.usuario.id]
+    );
+
+    const [enderecos] = await db.query(
+        `
+        SELECT *
+        FROM enderecos
+        WHERE usuario_id = ?
+        `,
+        [req.session.usuario.id]
+    );
+
+    const usuario = usuarios[0];
+    const endereco = enderecos[0] || {};
+
+    res.send(`
+
+    <!DOCTYPE html>
+
+    <html>
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+        <title>Minha Conta</title>
+
+    </head>
+
+    <body>
+
+    <div class="container mt-5">
+
+        <h1>Minha Conta</h1>
+
+        <form
+        action="/minha-conta"
+        method="POST">
+
+            <h4>Dados</h4>
+
+            <input
+            class="form-control mb-2"
+            name="nome"
+            value="${usuario.nome}">
+
+            <input
+            class="form-control mb-3"
+            name="email"
+            value="${usuario.email}">
+
+            <h4>Endereço</h4>
+
+            <input
+            class="form-control mb-2"
+            name="cep"
+            value="${endereco.cep || ''}"
+            placeholder="CEP">
+
+            <input
+            class="form-control mb-2"
+            name="rua"
+            value="${endereco.rua || ''}"
+            placeholder="Rua">
+
+            <input
+            class="form-control mb-2"
+            name="numero"
+            value="${endereco.numero || ''}"
+            placeholder="Número">
+
+            <input
+            class="form-control mb-2"
+            name="bairro"
+            value="${endereco.bairro || ''}"
+            placeholder="Bairro">
+
+            <input
+            class="form-control mb-2"
+            name="cidade"
+            value="${endereco.cidade || ''}"
+            placeholder="Cidade">
+
+            <input
+            class="form-control mb-3"
+            name="estado"
+            value="${endereco.estado || ''}"
+            placeholder="Estado">
+
+            <button
+            class="btn btn-primary">
+
+                Salvar
+
+            </button>
+
+        </form>
+
+    </div>
+
+    </body>
+
+    </html>
+
+    `);
+
+});
+
+    app.post('/minha-conta', auth, async (req, res) => {
+
+    const {
+        nome,
+        email,
+        cep,
+        rua,
+        numero,
+        bairro,
+        cidade,
+        estado
+    } = req.body;
+
+    await db.query(
+        `
+        UPDATE usuarios
+        SET nome = ?, email = ?
+        WHERE id = ?
+        `,
+        [
+            nome,
+            email,
+            req.session.usuario.id
+        ]
+    );
+
+    const [endereco] = await db.query(
+        `
+        SELECT *
+        FROM enderecos
+        WHERE usuario_id = ?
+        `,
+        [req.session.usuario.id]
+    );
+
+    if(endereco.length > 0){
+
+        await db.query(
+            `
+            UPDATE enderecos
+
+            SET
+            cep = ?,
+            rua = ?,
+            numero = ?,
+            bairro = ?,
+            cidade = ?,
+            estado = ?
+
+            WHERE usuario_id = ?
+            `,
+            [
+                cep,
+                rua,
+                numero,
+                bairro,
+                cidade,
+                estado,
+                req.session.usuario.id
+            ]
+        );
+
+    } else {
+
+        await db.query(
+            `
+            INSERT INTO enderecos
+            (
+                usuario_id,
+                cep,
+                rua,
+                numero,
+                bairro,
+                cidade,
+                estado
+            )
+            VALUES
+            (?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+                req.session.usuario.id,
+                cep,
+                rua,
+                numero,
+                bairro,
+                cidade,
+                estado
+            ]
+        );
+
+    }
+
+    res.redirect('/minha-conta');
+
+});
+
+    app.get('/carrinho/aumentar/:id', auth, async (req, res) => {
+
+    await db.query(
+        `
+        UPDATE itens_carrinho
+        SET quantidade = quantidade + 1
+        WHERE id = ?
+        `,
+        [req.params.id]
+    );
+
+    res.redirect('/carrinho');
+
+});
+
+    app.get('/carrinho/diminuir/:id', auth, async (req, res) => {
+
+    await db.query(
+        `
+        UPDATE itens_carrinho
+        SET quantidade = quantidade - 1
+        WHERE id = ?
+        AND quantidade > 1
+        `,
+        [req.params.id]
+    );
+
+    res.redirect('/carrinho');
+
+});
+
+app.get('/carrinho/remover/:id', auth, async (req, res) => {
+
+    await db.query(
+        `
+        DELETE FROM itens_carrinho
+        WHERE id = ?
+        `,
+        [req.params.id]
+    );
+
+    res.redirect('/carrinho');
+
+});
+
 app.listen(3000, () => {
     console.log('NovaStore rodando em http://localhost:3000');
 });
@@ -709,44 +1319,215 @@ app.get('/admin', admin, async (req, res) => {
         'SELECT COUNT(*) total FROM pedidos'
     );
 
+    const [[faturamento]] =
+    await db.query(
+        `
+        SELECT
+        IFNULL(SUM(valor_total),0) total
+        FROM pedidos
+        WHERE status <> 'cancelado'
+        `
+    );
+
     res.send(`
 
-    <h1>Painel Administrativo</h1>
+    <!DOCTYPE html>
 
-    <hr>
+    <html>
 
-    <h3>
-        📦 Produtos:
-        ${produtos.total}
-    </h3>
+    <head>
 
-    <h3>
-        👥 Usuários:
-        ${usuarios.total}
-    </h3>
+        <meta charset="UTF-8">
 
-    <h3>
-        🛒 Pedidos:
-        ${pedidos.total}
-    </h3>
+        <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1">
 
-    <br>
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
 
-    <a href="/admin/produtos/lista">
-        Produtos
-    </a>
+        <title>
+            Painel Administrativo
+        </title>
 
-    <br><br>
+    </head>
 
-    <a href="/admin/usuarios">
-        Usuários
-    </a>
+    <body class="bg-light">
 
-    <br><br>
+    <nav class="navbar navbar-dark bg-dark">
 
-    <a href="/admin/pedidos">
-        Pedidos
-    </a>
+        <div class="container-fluid">
+
+            <span class="navbar-brand">
+
+                Painel Administrativo
+
+            </span>
+
+            <a
+            href="/"
+            class="btn btn-outline-light">
+
+                Voltar à Loja
+
+            </a>
+
+        </div>
+
+    </nav>
+
+    <div class="container mt-4">
+
+        <div class="row">
+
+            <div class="col-md-4 mb-3">
+
+                <div class="card text-center shadow">
+
+                    <div class="card-body">
+
+                        <h1>
+                            📦
+                        </h1>
+
+                        <h3>
+                            ${produtos.total}
+                        </h3>
+
+                        <p>
+                            Produtos
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-4 mb-3">
+
+                <div class="card text-center shadow">
+
+                    <div class="card-body">
+
+                        <h1>
+                            👥
+                        </h1>
+
+                        <h3>
+                            ${usuarios.total}
+                        </h3>
+
+                        <p>
+                            Usuários
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-md-4 mb-3">
+
+                <div class="card text-center shadow">
+
+                    <div class="card-body">
+
+                        <h1>
+                            🛒
+                        </h1>
+
+                        <h3>
+                            ${pedidos.total}
+                        </h3>
+
+                        <p>
+                            Pedidos
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="col-md-3 mb-3">
+
+            <div class="card text-center shadow">
+
+                <div class="card-body">
+
+                    <h1>
+                        💰
+                    </h1>
+
+                    <h3>
+
+                        R$ ${Number(faturamento.total).toFixed(2)}
+
+                    </h3>
+
+                    <p>
+
+                        Faturamento
+
+                    </p>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="row mt-4">
+
+            <div class="col-md-4 mb-3">
+
+                <a
+                href="/admin/produtos/lista"
+                class="btn btn-primary w-100">
+
+                    Gerenciar Produtos
+
+                </a>
+
+            </div>
+
+            <div class="col-md-4 mb-3">
+
+                <a
+                href="/admin/usuarios"
+                class="btn btn-success w-100">
+
+                    Gerenciar Usuários
+
+                </a>
+
+            </div>
+
+            <div class="col-md-4 mb-3">
+
+                <a
+                href="/admin/pedidos"
+                class="btn btn-warning w-100">
+
+                    Gerenciar Pedidos
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    </body>
+
+    </html>
 
     `);
 
@@ -805,27 +1586,154 @@ app.get('/carrinho', async (req, res) => {
         [req.session.usuario.id]
     );
 
+    let total = 0;
+
     let html = `
-    <h1>Carrinho</h1>
+    <!DOCTYPE html>
+
+    <html>
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+        <title>Carrinho</title>
+
+    </head>
+
+    <body>
+
+    <div class="container mt-4">
+
+        <h1>Carrinho</h1>
+
+        <table class="table table-striped">
+
+            <thead>
+
+                <tr>
+
+                    <th>Produto</th>
+                    <th>Preço</th>
+                    <th>Quantidade</th>
+                    <th>Subtotal</th>
+                    <th>Remover</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
     `;
 
     itens.forEach(item => {
 
+        const subtotal =
+            Number(item.preco) *
+            Number(item.quantidade);
+
+        total += subtotal;
+
         html += `
-        <p>
-            ${item.nome}
-            -
-            R$ ${item.preco}
-        </p>
+        <tr>
+
+            <td>
+
+                ${item.nome}
+
+            </td>
+
+            <td>
+
+                R$ ${item.preco}
+
+            </td>
+
+            <td>
+
+                <a
+                href="/carrinho/diminuir/${item.id}"
+                class="btn btn-warning btn-sm">
+
+                    -
+
+                </a>
+
+                <span class="mx-2">
+
+                    ${item.quantidade}
+
+                </span>
+
+                <a
+                href="/carrinho/aumentar/${item.id}"
+                class="btn btn-success btn-sm">
+
+                    +
+
+                </a>
+
+            </td>
+
+            <td>
+
+                R$ ${subtotal.toFixed(2)}
+
+            </td>
+
+            <td>
+
+                <a
+                href="/carrinho/remover/${item.id}"
+                class="btn btn-danger btn-sm">
+
+                    X
+
+                </a>
+
+            </td>
+
+        </tr>
         `;
 
     });
 
     html += `
-    <br>
-    <a href="/finalizar">
-        Finalizar Pedido
-    </a>
+            </tbody>
+
+        </table>
+
+        <h3>
+
+            Total: R$ ${total.toFixed(2)}
+
+        </h3>
+
+        <a
+        href="/finalizar"
+        class="btn btn-primary">
+
+            Finalizar Pedido
+
+        </a>
+
+        <a
+        href="/"
+        class="btn btn-secondary">
+
+            Continuar Comprando
+
+        </a>
+
+    </div>
+
+    </body>
+
+    </html>
     `;
 
     res.send(html);
@@ -907,23 +1815,35 @@ app.get('/admin/pedidos', admin, async (req, res) => {
         `
     );
 
-    let html = `
-        <table class="table table-striped">
+        let html = `
+        <!DOCTYPE html>
 
-        <thead>
-        <tr>
+        <html>
 
-        <th>ID</th>
-        <th>Cliente</th>
-        <th>Total</th>
-        <th>Status</th>
-        <th>Ações</th>
+        <head>
 
-        </tr>
-        </thead>
+        <meta charset="UTF-8">
 
-        <tbody>
-    `;
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+        <title>Pedidos</title>
+
+        </head>
+
+        <body>
+
+        <div class="container mt-4">
+
+        <h1 class="mb-4">
+
+        Pedidos
+
+        </h1>
+
+        <table class="table table-striped table-hover">
+        `;
 
     pedidos.forEach(pedido => {
 
@@ -980,9 +1900,22 @@ app.get('/admin/pedidos', admin, async (req, res) => {
     });
 
         html += `
-            </tbody>
-            </table>
-            `;
+        </tbody>
+        </table>
+
+                <a
+                href="/admin"
+                class="btn btn-secondary">
+
+                      Voltar
+
+                </a>
+
+            </div>
+
+        </body>
+    </html>
+    `;
 
     res.send(html);
 
@@ -997,47 +1930,130 @@ app.get('/admin/produtos/lista', admin, async (req, res) => {
     );
 
     let html = `
-    <h1>Produtos</h1>
+    <!DOCTYPE html>
 
-    <a href="/admin/produtos">
-        Novo Produto
-    </a>
+    <html>
 
-    <hr>
+    <head>
+
+        <meta charset="UTF-8">
+
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+        <title>Produtos</title>
+
+    </head>
+
+    <body>
+
+    <div class="container mt-4">
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+
+            <h1>
+                Produtos
+            </h1>
+
+            <a
+            href="/admin/produtos"
+            class="btn btn-success">
+
+                + Novo Produto
+
+            </a>
+
+        </div>
+
+        <table class="table table-striped table-hover">
+
+            <thead class="table-dark">
+
+                <tr>
+
+                    <th>ID</th>
+                    <th>Produto</th>
+                    <th>Preço</th>
+                    <th>Estoque</th>
+                    <th>Ações</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
     `;
 
     produtos.forEach(produto => {
 
         html += `
-        <p>
+        <tr>
 
-            ${produto.nome}
+            <td>${produto.id}</td>
 
-            -
+            <td>${produto.nome}</td>
 
-            R$ ${produto.preco}
+            <td>R$ ${produto.preco}</td>
 
-            -
+            <td>
 
-            <a href="/admin/produtos/editar/${produto.id}">
-                Editar
-            </a>
+                <span class="badge bg-primary">
 
-            -
+                    ${produto.estoque}
 
-            <a href="/admin/produtos/excluir/${produto.id}">
-                Excluir
-            </a>
+                </span>
 
-        </p>
+            </td>
+
+            <td>
+
+                <a
+                href="/admin/produtos/editar/${produto.id}"
+                class="btn btn-warning btn-sm">
+
+                    Editar
+
+                </a>
+
+                <a
+                href="/admin/produtos/excluir/${produto.id}"
+                class="btn btn-danger btn-sm">
+
+                    Excluir
+
+                </a>
+
+            </td>
+
+        </tr>
         `;
 
     });
 
+    html += `
+            </tbody>
+
+        </table>
+
+        <a
+        href="/admin"
+        class="btn btn-secondary">
+
+            Voltar
+
+        </a>
+
+    </div>
+
+    </body>
+
+    </html>
+    `;
+
     res.send(html);
 
 });
-
 //
 
 app.get('/admin/produtos/editar/:id', admin, async (req, res) => {
@@ -1051,33 +2067,119 @@ app.get('/admin/produtos/editar/:id', admin, async (req, res) => {
 
     res.send(`
 
-    <form
-    action="/produtos/editar/${p.id}"
-    method="POST">
+    <!DOCTYPE html>
 
-        <input
-        name="nome"
-        value="${p.nome}">
+    <html>
 
-        <br><br>
+    <head>
 
-        <input
-        name="preco"
-        value="${p.preco}">
+        <meta charset="UTF-8">
 
-        <br><br>
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
 
-        <input
-        name="estoque"
-        value="${p.estoque}">
+        <title>
+            Editar Produto
+        </title>
 
-        <br><br>
+    </head>
 
-        <button>
-            Salvar
-        </button>
+    <body>
 
-    </form>
+    <div class="container mt-5">
+
+        <div class="card shadow">
+
+            <div class="card-header">
+
+                <h3>
+                    Editar Produto
+                </h3>
+
+            </div>
+
+            <div class="card-body">
+
+                <form
+                action="/produtos/editar/${p.id}"
+                method="POST">
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+
+                            Nome
+
+                        </label>
+
+                        <input
+                        type="text"
+                        class="form-control"
+                        name="nome"
+                        value="${p.nome}">
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+
+                            Preço
+
+                        </label>
+
+                        <input
+                        type="number"
+                        step="0.01"
+                        class="form-control"
+                        name="preco"
+                        value="${p.preco}">
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+
+                            Estoque
+
+                        </label>
+
+                        <input
+                        type="number"
+                        class="form-control"
+                        name="estoque"
+                        value="${p.estoque}">
+
+                    </div>
+
+                    <button
+                    class="btn btn-success">
+
+                        Salvar Alterações
+
+                    </button>
+
+                    <a
+                    href="/admin/produtos/lista"
+                    class="btn btn-secondary">
+
+                        Cancelar
+
+                    </a>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    </body>
+
+    </html>
 
     `);
 
@@ -1255,6 +2357,24 @@ app.get('/admin/usuarios/excluir/:id', admin, async (req, res) => {
 
 app.get('/admin/pedido/:id', admin, async (req, res) => {
 
+    const [pedidoInfo] = await db.query(
+        `
+        SELECT
+            p.*,
+            u.nome
+
+        FROM pedidos p
+
+        INNER JOIN usuarios u
+        ON u.id = p.usuario_id
+
+        WHERE p.id = ?
+        `,
+        [req.params.id]
+    );
+
+    const pedido = pedidoInfo[0];
+
     const [itens] = await db.query(
         `
         SELECT
@@ -1271,31 +2391,167 @@ app.get('/admin/pedido/:id', admin, async (req, res) => {
         [req.params.id]
     );
 
+    let total = 0;
+
     let html = `
-    <h1>Pedido #${req.params.id}</h1>
-    <hr>
+    <!DOCTYPE html>
+
+    <html>
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+        <title>
+            Pedido #${req.params.id}
+        </title>
+
+    </head>
+
+    <body>
+
+    <div class="container mt-4">
+
+        <div class="card shadow mb-4">
+
+            <div class="card-header bg-dark text-white">
+
+                <h3>
+                    Pedido #${pedido.id}
+                </h3>
+
+            </div>
+
+            <div class="card-body">
+
+                <p>
+
+                    <strong>Cliente:</strong>
+                    ${pedido.nome}
+
+                </p>
+
+                <p>
+
+                    <strong>Status:</strong>
+
+                    <span class="badge bg-primary">
+
+                        ${pedido.status}
+
+                    </span>
+
+                </p>
+
+                <p>
+
+                    <strong>Data:</strong>
+                    ${pedido.data_pedido}
+
+                </p>
+
+            </div>
+
+        </div>
+
+        <table class="table table-striped table-hover">
+
+            <thead class="table-dark">
+
+                <tr>
+
+                    <th>Produto</th>
+                    <th>Quantidade</th>
+                    <th>Valor Unitário</th>
+                    <th>Subtotal</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
     `;
 
     itens.forEach(item => {
 
+        const subtotal =
+            Number(item.quantidade) *
+            Number(item.preco_unitario);
+
+        total += subtotal;
+
         html += `
-        <p>
+        <tr>
 
-            ${item.nome}
+            <td>
 
-            -
+                ${item.nome}
 
-            Quantidade:
-            ${item.quantidade}
+            </td>
 
-            -
+            <td>
 
-            R$ ${item.preco_unitario}
+                ${item.quantidade}
 
-        </p>
+            </td>
+
+            <td>
+
+                R$ ${Number(item.preco_unitario).toFixed(2)}
+
+            </td>
+
+            <td>
+
+                R$ ${subtotal.toFixed(2)}
+
+            </td>
+
+        </tr>
         `;
 
     });
+
+    html += `
+            </tbody>
+
+        </table>
+
+        <div class="card shadow">
+
+            <div class="card-body text-end">
+
+                <h3>
+
+                    Total:
+                    R$ ${total.toFixed(2)}
+
+                </h3>
+
+            </div>
+
+        </div>
+
+        <br>
+
+        <a
+        href="/admin/pedidos"
+        class="btn btn-secondary">
+
+            Voltar
+
+        </a>
+
+    </div>
+
+    </body>
+
+    </html>
+    `;
 
     res.send(html);
 

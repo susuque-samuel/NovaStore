@@ -15,7 +15,8 @@ router.get(
 
         let [carrinho] = await db.query(
             `
-            SELECT * FROM carrinhos
+            SELECT *
+            FROM carrinhos
             WHERE usuario_id = ?
             `,
             [req.session.usuario.id]
@@ -51,30 +52,70 @@ router.get(
             [produtoId]
         );
 
-        if(produto[0].estoque <= 0){
+        const p = produto[0];
 
-            return res.send(
-        'Produto sem estoque.'
-    );
+        if (!p) {
+            return res.send('Produto não encontrado.');
+        }
 
-}
+        if (p.estoque <= 0) {
+            return res.send('Produto sem estoque.');
+        }
 
-        await db.query(
+        const [itemExistente] = await db.query(
             `
-            INSERT INTO itens_carrinho
-            (
-                carrinho_id,
-                produto_id,
-                quantidade
-            )
-            VALUES
-            (?, ?, 1)
+            SELECT *
+            FROM itens_carrinho
+            WHERE carrinho_id = ?
+            AND produto_id = ?
             `,
             [
                 carrinhoId,
                 produtoId
             ]
         );
+
+        if (itemExistente.length > 0) {
+
+            if (
+                itemExistente[0].quantidade >= p.estoque
+            ) {
+
+                return res.send(
+                    'Estoque insuficiente.'
+                );
+
+            }
+
+            await db.query(
+                `
+                UPDATE itens_carrinho
+                SET quantidade = quantidade + 1
+                WHERE id = ?
+                `,
+                [itemExistente[0].id]
+            );
+
+        } else {
+
+            await db.query(
+                `
+                INSERT INTO itens_carrinho
+                (
+                    carrinho_id,
+                    produto_id,
+                    quantidade
+                )
+                VALUES
+                (?, ?, 1)
+                `,
+                [
+                    carrinhoId,
+                    produtoId
+                ]
+            );
+
+        }
 
         res.redirect('/');
 
